@@ -357,9 +357,10 @@ setInterval(() => {
 // OPENROUTER LLM INTEGRATION WITH FALLBACK
 // ─────────────────────────────────────────────
 const MODELS = [
-  'openai/gpt-oss-120b:free',
-  'meta-llama/llama-3.3-70b-instruct:free',
-  'google/gemma-3-27b-it:free'
+  'google/gemini-2.5-flash:free',
+  'meta-llama/llama-3.1-8b-instruct:free',
+  'google/gemma-3-27b-it:free',
+  'openai/gpt-oss-120b:free'
 ];
 
 async function callLLM(messages, modelIndex = 0) {
@@ -369,6 +370,9 @@ async function callLLM(messages, modelIndex = 0) {
 
   const model = MODELS[modelIndex];
   console.log(`🤖 Trying model: ${model}`);
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000); // 8-second timeout to prevent Netlify 10s crash
 
   try {
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -382,11 +386,14 @@ async function callLLM(messages, modelIndex = 0) {
       body: JSON.stringify({
         model,
         messages,
-        max_tokens: 2048,
+        max_tokens: 1024, // reduced tokens for faster response
         temperature: 0.7,
         top_p: 0.9
-      })
+      }),
+      signal: controller.signal
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errText = await response.text();
