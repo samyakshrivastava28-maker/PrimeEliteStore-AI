@@ -15,9 +15,51 @@ app.use(express.static(path.join(__dirname, 'public')));
 let productDB = [];
 let storeDetails = {};
 
+// Normalize category names to fix inconsistencies in the source data
+// e.g. "Smart devices" vs "Smart Devices" → "smart devices"
+const CATEGORY_NORMALIZE = {
+  'watches': 'watches',
+  'smartwatches': 'smartwatches',
+  'earpods': 'earpods',
+  'headphones': 'headphones',
+  'smart devices': 'smart devices',
+  'audio': 'audio'
+};
+
+function normalizeCategory(cat) {
+  const lower = (cat || '').toLowerCase().trim();
+  return CATEGORY_NORMALIZE[lower] || lower;
+}
+
 function loadProducts() {
+  // Try multiple file paths for robustness (especially on Netlify serverless)
+  const filenames = ['products.json', 'product_export (1).json'];
+  const baseDirs = [__dirname, process.cwd()];
+  let raw = null;
+  let loadedFrom = '';
+
+  for (const dir of baseDirs) {
+    for (const file of filenames) {
+      const fullPath = path.join(dir, file);
+      try {
+        raw = fs.readFileSync(fullPath, 'utf-8');
+        loadedFrom = fullPath;
+        break;
+      } catch (e) {
+        // Try next path
+        console.log(`📂 Tried ${fullPath} — not found, trying next...`);
+      }
+    }
+    if (raw) break;
+  }
+
+  if (!raw) {
+    console.error('❌ CRITICAL: Could not find product database file in any location!');
+    console.error('   Searched in:', baseDirs.map(d => `${d}/[${filenames.join(', ')}]`).join(', '));
+    return;
+  }
+
   try {
-    const raw = fs.readFileSync(path.join(__dirname, 'product_export (1).json'), 'utf-8');
     const data = JSON.parse(raw);
     storeDetails = data.store_details || {};
     productDB = (data.products || []).map(p => {
@@ -32,7 +74,7 @@ function loadProducts() {
         id: p.id,
         name: p.name || '',
         description: p.description || '',
-        category: (p.category || '').toLowerCase(),
+        category: normalizeCategory(p.category),
         link: p.link || '',
         price: p.price || 0,
         thumbnail,
@@ -49,9 +91,14 @@ function loadProducts() {
         ].join(' ').toLowerCase()
       };
     });
-    console.log(`✅ Loaded ${productDB.length} products from database`);
+
+    // Log database stats
+    const categories = {};
+    productDB.forEach(p => { categories[p.category] = (categories[p.category] || 0) + 1; });
+    console.log(`✅ Loaded ${productDB.length} products from: ${loadedFrom}`);
+    console.log(`📊 Categories:`, JSON.stringify(categories));
   } catch (err) {
-    console.error('❌ Failed to load product database:', err.message);
+    console.error('❌ Failed to parse product database:', err.message);
   }
 }
 

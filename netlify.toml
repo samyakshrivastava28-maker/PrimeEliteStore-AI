@@ -3,7 +3,7 @@
   command = "npm install"
 
 [functions]
-  included_files = ["product_export (1).json"]
+  included_files = ["products.json", "product_export (1).json"]
 
 [[redirects]]
   from = "/api/*"
