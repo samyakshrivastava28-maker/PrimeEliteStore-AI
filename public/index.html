@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prime Elite Store — AI Assistant</title>
+  <meta name="description" content="Premium AI Shopping Assistant for Prime Elite Store. Luxury Watches, Smart Devices, Earbuds & More.">
+  <meta name="theme-color" content="#0a0a0f">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="index.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header id="header">
+      <div class="header-inner">
+        <div class="header-brand">
+          <div class="logo-icon">
+            <img src="logo.webp" alt="Prime Elite Store Logo" style="width: 100%; height: 100%; object-fit: contain; border-radius: var(--radius-md);">
+          </div>
+          <div class="header-text">
+            <h1>Prime Elite Store</h1>
+            <span class="header-tagline">AI Shopping Assistant</span>
+          </div>
+        </div>
+        <div class="header-status">
+          <span class="status-dot"></span>
+          <span class="status-text">Online</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Chat Area -->
+    <main id="chatArea">
+      <!-- Welcome Screen -->
+      <div id="welcomeScreen">
+        <div class="welcome-glow"></div>
+        <div class="welcome-icon" style="width: 120px; height: 120px; border-radius: 50%; overflow: hidden; border: 2px solid var(--gold-primary); box-shadow: var(--shadow-gold);">
+          <img src="logo.webp" alt="Prime Elite Store Logo" style="width: 100%; height: 100%; object-fit: cover;">
+        </div>
+        <h2 class="welcome-title">Welcome to <span class="gold-text">Prime Elite Store</span></h2>
+        <p class="welcome-subtitle">Your premium AI-powered shopping assistant. Ask me anything about our luxury watches, smart devices, earbuds, or any question at all.</p>
+        
+        <div class="quick-actions">
+          <button class="quick-btn" data-query="Show me your luxury watches">
+            <span class="qb-icon">⌚</span> Luxury Watches
+          </button>
+          <button class="quick-btn" data-query="Show me your smartwatches">
+            <span class="qb-icon">📱</span> Smart Watches
+          </button>
+          <button class="quick-btn" data-query="Show me your earbuds and earpods">
+            <span class="qb-icon">🎧</span> Earbuds & Pods
+          </button>
+          <button class="quick-btn" data-query="Show me your smart devices and gadgets">
+            <span class="qb-icon">🔌</span> Smart Devices
+          </button>
+          <button class="quick-btn" data-query="What are your best products under ₹5000?">
+            <span class="qb-icon">💰</span> Under ₹5000
+          </button>
+          <button class="quick-btn" data-query="Show me your premium products above ₹10000">
+            <span class="qb-icon">👑</span> Premium Range
+          </button>
+          <button class="quick-btn" data-query="What is your contact information?">
+            <span class="qb-icon">📞</span> Contact Us
+          </button>
+          <button class="quick-btn" data-query="What are your store policies for ordering?">
+            <span class="qb-icon">📋</span> Store Policies
+          </button>
+        </div>
+      </div>
+
+      <!-- Messages Container -->
+      <div id="messages"></div>
+
+      <!-- Typing Indicator -->
+      <div id="typingIndicator" class="typing-indicator hidden">
+        <div class="typing-avatar">
+          <svg width="20" height="20" viewBox="0 0 28 28" fill="none">
+            <path d="M14 2L26 8V20L14 26L2 20V8L14 2Z" stroke="#d4af37" stroke-width="2" fill="none"/>
+            <path d="M14 10L18 12V16L14 18L10 16V12L14 10Z" fill="#d4af37"/>
+          </svg>
+        </div>
+        <div class="typing-dots">
+          <span></span><span></span><span></span>
+        </div>
+      </div>
+    </main>
+
+    <!-- Input Bar -->
+    <footer id="inputBar">
+      <div class="input-container">
+        <textarea id="messageInput" placeholder="Ask me anything..." rows="1" autocomplete="off"></textarea>
+        <button id="sendBtn" title="Send message" aria-label="Send message">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <path d="M22 2L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          </svg>
+        </button>
+      </div>
+      <p class="input-footer-text">Prime Elite Store AI • Made by <a href="https://28webhub.netlify.app" target="_blank" style="color: var(--gold-light); text-decoration: none; border-bottom: 1px solid rgba(245, 214, 118, 0.3); transition: border-color 0.2s;">S-Web Hub</a></p>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
