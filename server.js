@@ -371,11 +371,11 @@ async function callLLM(messages, modelIndex = 0) {
   const model = MODELS[modelIndex];
   console.log(`🤖 Trying model: ${model}`);
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000); // 8-second timeout to prevent Netlify 10s crash
-
   try {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutId = controller ? setTimeout(() => controller.abort(), 8000) : null;
+
+    const fetchOptions = {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
@@ -386,14 +386,19 @@ async function callLLM(messages, modelIndex = 0) {
       body: JSON.stringify({
         model,
         messages,
-        max_tokens: 1024, // reduced tokens for faster response
+        max_tokens: 1024,
         temperature: 0.7,
         top_p: 0.9
-      }),
-      signal: controller.signal
-    });
+      })
+    };
 
-    clearTimeout(timeoutId);
+    if (controller) {
+      fetchOptions.signal = controller.signal;
+    }
+
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', fetchOptions);
+
+    if (timeoutId) clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errText = await response.text();
