@@ -9,6 +9,31 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+const { initializeApp, cert } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
+
+let db;
+try {
+  let serviceAccount;
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
+    const buff = Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, 'base64');
+    serviceAccount = JSON.parse(buff.toString('utf-8'));
+  } else {
+    // Fallback for local dev
+    serviceAccount = require('./gen-lang-client-0984598055-firebase-adminsdk-fbsvc-14d61d085e.json');
+  }
+
+  const fbApp = initializeApp({
+    credential: cert(serviceAccount)
+  });
+  
+  // Connect to the specific AI Studio database where products live
+  db = getFirestore(fbApp, 'ai-studio-2c4b8a34-fa64-4b18-a150-da55701e48b3');
+  console.log('✅ Firebase Admin initialized successfully');
+} catch (err) {
+  console.error('❌ Failed to initialize Firebase Admin:', err.message);
+}
+
 // ─────────────────────────────────────────────
 // PRODUCT DATABASE
 // ─────────────────────────────────────────────
@@ -31,78 +56,76 @@ function normalizeCategory(cat) {
   return CATEGORY_NORMALIZE[lower] || lower;
 }
 
-function loadProducts() {
-  // Try multiple file paths for robustness (especially on Netlify serverless)
-  const filenames = ['products.json', 'product_export (1).json'];
-  const baseDirs = [__dirname, process.cwd()];
-  let raw = null;
-  let loadedFrom = '';
-
-  for (const dir of baseDirs) {
-    for (const file of filenames) {
-      const fullPath = path.join(dir, file);
-      try {
-        raw = fs.readFileSync(fullPath, 'utf-8');
-        loadedFrom = fullPath;
-        break;
-      } catch (e) {
-        // Try next path
-        console.log(`📂 Tried ${fullPath} — not found, trying next...`);
-      }
-    }
-    if (raw) break;
-  }
-
-  if (!raw) {
-    console.error('❌ CRITICAL: Could not find product database file in any location!');
-    console.error('   Searched in:', baseDirs.map(d => `${d}/[${filenames.join(', ')}]`).join(', '));
+async function loadProducts() {
+  if (!db) {
+    console.error('❌ Cannot load products, Firestore not initialized');
     return;
   }
-
+  
   try {
-    const data = JSON.parse(raw);
-    storeDetails = data.store_details || {};
-    productDB = (data.products || []).map(p => {
-      // Resolve thumbnail: first variant image, or fallback
+    const snapshot = await db.collection('products').get();
+    
+    if (snapshot.empty) {
+      console.log('⚠️ No products found in Firestore');
+      return;
+    }
+    
+    productDB = [];
+    snapshot.forEach(doc => {
+      const p = doc.data();
+      
+      // Resolve thumbnail: imageUrls[0] or variant image or fallback
       let thumbnail = '';
-      if (p.variants && p.variants.length > 0) {
-        for (const v of p.variants) {
-          if (v.image) { thumbnail = v.image; break; }
-        }
+      if (p.imageUrls && p.imageUrls.length > 0) {
+        thumbnail = p.imageUrls[0];
+      } else if (p.variants && p.variants.length > 0 && p.variants[0].image) {
+        thumbnail = p.variants[0].image;
       }
-      return {
-        id: p.id,
-        name: p.name || '',
+      
+      const mappedProduct = {
+        id: doc.id,
+        name: p.productName || '',
         description: p.description || '',
         category: normalizeCategory(p.category),
-        link: p.link || '',
+        link: `https://primeelitestore02.netlify.app/products/${doc.id}`,
         price: p.price || 0,
         thumbnail,
-        variants: p.variants || [],
-        specs: p.specs || [],
-        features: p.features || [],
-        advanceBookingPolicy: p.advanceBookingPolicy || '',
-        // Search index: combined lowercase text for fast matching
+        variants: (p.variants || []).map(v => ({ name: v.color || v.name, image: v.image })),
+        specs: p.specifications || [],
+        features: [
+          p.featured ? 'Featured' : null, 
+          p.trending ? 'Trending' : null, 
+          p.badge
+        ].filter(Boolean),
+        advanceBookingPolicy: p.advanceBooking || '',
+        // Search index
         _searchText: [
-          p.name, p.description, p.category,
-          ...(p.specs || []).map(s => s.key + ' ' + s.value),
-          ...(p.features || []).map(f => typeof f === 'string' ? f : ''),
-          ...(p.variants || []).map(v => v.name)
+          p.productName, p.description, p.category,
+          ...(p.specifications || []).map(s => s.key + ' ' + s.value),
+          p.badge,
+          ...(p.variants || []).map(v => v.color || v.name)
         ].join(' ').toLowerCase()
       };
+      
+      productDB.push(mappedProduct);
     });
 
     // Log database stats
     const categories = {};
     productDB.forEach(p => { categories[p.category] = (categories[p.category] || 0) + 1; });
-    console.log(`✅ Loaded ${productDB.length} products from: ${loadedFrom}`);
+    console.log(`✅ Loaded ${productDB.length} products from Firestore`);
     console.log(`📊 Categories:`, JSON.stringify(categories));
+    
   } catch (err) {
-    console.error('❌ Failed to parse product database:', err.message);
+    console.error('❌ Failed to fetch products from Firestore:', err.message);
   }
 }
 
+// Initial load
 loadProducts();
+
+// Refresh products every 15 minutes to keep them up to date
+setInterval(loadProducts, 15 * 60 * 1000);
 
 // ─────────────────────────────────────────────
 // PRODUCT SEARCH ENGINE
@@ -330,37 +353,41 @@ NO HALLUCINATION & REFUSALS (CRITICAL — READ CAREFULLY):
 // ─────────────────────────────────────────────
 // CONVERSATION MEMORY
 // ─────────────────────────────────────────────
-const sessions = new Map();
 const SESSION_MAX_MESSAGES = 30;
-const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
 
-function getSession(sessionId) {
-  if (!sessions.has(sessionId)) {
-    sessions.set(sessionId, { messages: [], lastAccess: Date.now() });
+async function getSession(sessionId) {
+  if (!db) return { messages: [], lastAccess: Date.now() };
+  try {
+    const docRef = db.collection('chat_sessions').doc(sessionId);
+    const docSnap = await docRef.get();
+    if (docSnap.exists) {
+      return docSnap.data();
+    }
+    return { messages: [], lastAccess: Date.now() };
+  } catch (e) {
+    console.error('Error reading session:', e.message);
+    return { messages: [], lastAccess: Date.now() };
   }
-  const session = sessions.get(sessionId);
-  session.lastAccess = Date.now();
-  return session;
 }
 
-// Cleanup old sessions every 10 minutes
-setInterval(() => {
-  const now = Date.now();
-  for (const [id, session] of sessions) {
-    if (now - session.lastAccess > SESSION_TIMEOUT) {
-      sessions.delete(id);
-    }
+async function saveSession(sessionId, session) {
+  if (!db) return;
+  try {
+    session.lastAccess = Date.now();
+    await db.collection('chat_sessions').doc(sessionId).set(session);
+  } catch (e) {
+    console.error('Error saving session:', e.message);
   }
-}, 10 * 60 * 1000);
+}
 
 // ─────────────────────────────────────────────
 // OPENROUTER LLM INTEGRATION WITH FALLBACK
 // ─────────────────────────────────────────────
 const MODELS = [
-  'google/gemini-2.5-flash:free',
-  'meta-llama/llama-3.1-8b-instruct:free',
-  'google/gemma-3-27b-it:free',
-  'openai/gpt-oss-120b:free'
+  'google/gemini-2.5-flash:free',             // Fastest and smartest overall (~1-2 seconds)
+  'meta-llama/llama-3.1-8b-instruct:free',    // Extremely fast 8B model
+  'meta-llama/llama-3.2-3b-instruct:free',    // Ultra-fast 3B model fallback
+  'mistralai/mistral-7b-instruct:free'        // Fast and reliable fallback
 ];
 
 async function callLLM(messages, modelIndex = 0) {
@@ -440,7 +467,7 @@ app.post(['/api/chat', '/.netlify/functions/api/chat'], async (req, res) => {
       return res.status(400).json({ error: 'Message is required' });
     }
 
-    const session = getSession(sessionId || 'default');
+    const session = await getSession(sessionId || 'default');
 
     // Search for relevant products
     let productContext = '';
@@ -487,6 +514,9 @@ app.post(['/api/chat', '/.netlify/functions/api/chat'], async (req, res) => {
     if (session.messages.length > SESSION_MAX_MESSAGES * 2) {
       session.messages = session.messages.slice(-SESSION_MAX_MESSAGES);
     }
+
+    // Save back to Firestore
+    await saveSession(sessionId || 'default', session);
 
     // Send response with product data for frontend rendering
     res.json({
