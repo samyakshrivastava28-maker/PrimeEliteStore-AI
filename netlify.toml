@@ -1,10 +1,6 @@
 [build]
   publish = "public"
   command = "npm install"
-  functions = "netlify/functions"
-
-[functions]
-  included_files = ["products.json", "product_export (1).json"]
 
 [[redirects]]
   from = "/api/*"
