@@ -325,9 +325,9 @@ When showing products, you MUST format EACH product EXACTLY like this:
 
 - ALWAYS include the image using markdown: ![Product Image](url)
 - ALWAYS include the product link
-- NEVER invent prices, links, images, or specifications
+- EXTREMELY CRITICAL: NEVER INVENT OR HALLUCINATE PRODUCTS, PRICES, LINKS, OR IMAGES.
+- IF A PRODUCT IS NOT PROVIDED IN THE [SYSTEM DATABASE LOOKUP RESULTS], YOU DO NOT SELL IT. You must politely say it is not available in the store.
 - ONLY use data provided in the product context
-
 RECOMMENDATION RULES:
 - When recommending, explain WHY you recommend each product
 - Consider budget, use case, and preferences
@@ -485,14 +485,19 @@ app.post(['/api/chat', '/.netlify/functions/api/chat'], async (req, res) => {
     const recentHistory = session.messages.slice(-SESSION_MAX_MESSAGES);
     llmMessages.push(...recentHistory);
 
-    // Inject product context as a dedicated system-level user message
-    // This ensures the LLM sees the products prominently, not buried in the system prompt
     // Add current user message with context if available
-    if (productContext) {
-      llmMessages.push({
-        role: 'user',
-        content: `[SYSTEM DATABASE LOOKUP RESULTS — NOT FROM THE CUSTOMER]\n${productContext}\n\n--- CUSTOMER MESSAGE ---\n${message}`
-      });
+    if (isProductQuery(message)) {
+      if (matchedProducts.length > 0) {
+        llmMessages.push({
+          role: 'user',
+          content: `[SYSTEM DATABASE LOOKUP RESULTS — NOT FROM THE CUSTOMER]\n${productContext}\n\n--- CUSTOMER MESSAGE ---\n${message}`
+        });
+      } else {
+        llmMessages.push({
+          role: 'user',
+          content: `[SYSTEM DATABASE LOOKUP RESULTS]\n0 products found matching the query in the database. DO NOT INVENT ANY PRODUCTS. Apologize and say the requested item is not available in the store.\n\n--- CUSTOMER MESSAGE ---\n${message}`
+        });
+      }
     } else {
       llmMessages.push({ role: 'user', content: message });
     }
