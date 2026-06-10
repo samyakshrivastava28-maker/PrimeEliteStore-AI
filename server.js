@@ -489,19 +489,15 @@ app.post(['/api/chat', '/.netlify/functions/api/chat'], async (req, res) => {
 
     // Inject product context as a dedicated system-level user message
     // This ensures the LLM sees the products prominently, not buried in the system prompt
+    // Add current user message with context if available
     if (productContext) {
       llmMessages.push({
         role: 'user',
-        content: `[SYSTEM DATABASE LOOKUP RESULTS — NOT FROM THE CUSTOMER]\n${productContext}\n\nThe customer's actual message follows next. Use the products above to answer them.`
+        content: `[SYSTEM DATABASE LOOKUP RESULTS — NOT FROM THE CUSTOMER]\n${productContext}\n\n--- CUSTOMER MESSAGE ---\n${message}`
       });
-      llmMessages.push({
-        role: 'assistant',
-        content: `I found ${matchedProducts.length} matching product(s) in our database. Let me present them to the customer.`
-      });
+    } else {
+      llmMessages.push({ role: 'user', content: message });
     }
-
-    // Add current user message
-    llmMessages.push({ role: 'user', content: message });
 
     // Call LLM with fallback
     const reply = await callLLM(llmMessages);
