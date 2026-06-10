@@ -384,10 +384,10 @@ async function saveSession(sessionId, session) {
 // OPENROUTER LLM INTEGRATION WITH FALLBACK
 // ─────────────────────────────────────────────
 const MODELS = [
-  'google/gemini-2.5-flash:free',             // Fastest and smartest overall (~1-2 seconds)
-  'meta-llama/llama-3.1-8b-instruct:free',    // Extremely fast 8B model
+  'meta-llama/llama-3.3-70b-instruct:free',    // Extremely smart and reliable
+  'google/gemma-4-31b-it:free',               // Fast and highly capable Google model
   'meta-llama/llama-3.2-3b-instruct:free',    // Ultra-fast 3B model fallback
-  'mistralai/mistral-7b-instruct:free'        // Fast and reliable fallback
+  'nousresearch/hermes-3-llama-3.1-405b:free' // Powerful backup
 ];
 
 async function callLLM(messages, modelIndex = 0) {
