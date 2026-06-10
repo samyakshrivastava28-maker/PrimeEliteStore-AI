@@ -41,91 +41,83 @@ let productDB = [];
 let storeDetails = {};
 
 // Normalize category names to fix inconsistencies in the source data
-// e.g. "Smart devices" vs "Smart Devices" → "smart devices"
+// e.g. "Smart devices" vs "Smart Devices" → "Smart Devices"
 const CATEGORY_NORMALIZE = {
-  'watches': 'watches',
-  'smartwatches': 'smartwatches',
-  'earpods': 'earpods',
-  'headphones': 'headphones',
-  'smart devices': 'smart devices',
-  'audio': 'audio'
+  'watches': 'Watches',
+  'smartwatches': 'Smartwatches',
+  'earpods': 'EarPods',
+  'headphones': 'Headphones',
+  'smart devices': 'Smart Devices'
 };
 
 function normalizeCategory(cat) {
   const lower = (cat || '').toLowerCase().trim();
-  return CATEGORY_NORMALIZE[lower] || lower;
+  return CATEGORY_NORMALIZE[lower] || cat;
 }
 
-async function loadProducts() {
-  if (!db) {
-    console.error('❌ Cannot load products, Firestore not initialized');
-    return;
-  }
-  
+// Load products from the local JSON export file (definitive product source)
+function loadProducts() {
   try {
-    const snapshot = await db.collection('products').get();
-    
-    if (snapshot.empty) {
-      console.log('⚠️ No products found in Firestore');
+    // Read from the definitive product export file
+    const rawData = fs.readFileSync(path.join(__dirname, 'product_export (2).json'), 'utf-8');
+    const data = JSON.parse(rawData);
+
+    // Load store details
+    if (data.store_details) {
+      storeDetails = data.store_details;
+    }
+
+    if (!data.products || data.products.length === 0) {
+      console.log('⚠️ No products found in JSON export');
       return;
     }
-    
+
     productDB = [];
-    snapshot.forEach(doc => {
-      const p = doc.data();
-      
-      // Resolve thumbnail: imageUrls[0] or variant image or fallback
+    data.products.forEach(p => {
+      // Resolve thumbnail: first image from images array, or first variant image
       let thumbnail = '';
-      if (p.imageUrls && p.imageUrls.length > 0) {
-        thumbnail = p.imageUrls[0];
+      if (p.images && p.images.length > 0) {
+        thumbnail = p.images[0];
       } else if (p.variants && p.variants.length > 0 && p.variants[0].image) {
         thumbnail = p.variants[0].image;
       }
-      
+
       const mappedProduct = {
-        id: doc.id,
-        name: p.productName || '',
+        id: p.id,
+        name: p.name || '',
         description: p.description || '',
         category: normalizeCategory(p.category),
-        link: `https://primeelitestore02.netlify.app/products/${doc.id}`,
+        link: p.link || `https://primeelitestore02.netlify.app/products/${p.id}`,
         price: p.price || 0,
         thumbnail,
-        variants: (p.variants || []).map(v => ({ name: v.color || v.name, image: v.image })),
-        specs: p.specifications || [],
-        features: [
-          p.featured ? 'Featured' : null, 
-          p.trending ? 'Trending' : null, 
-          p.badge
-        ].filter(Boolean),
-        advanceBookingPolicy: p.advanceBooking || '',
-        // Search index
+        variants: (p.variants || []).map(v => ({ name: v.name, image: v.image })),
+        specs: p.specs || [],
+        features: p.features || [],
+        advanceBookingPolicy: p.advanceBookingPolicy || '50% upfront payment required',
+        // Search index for fast keyword matching
         _searchText: [
-          p.productName, p.description, p.category,
-          ...(p.specifications || []).map(s => s.key + ' ' + s.value),
-          p.badge,
-          ...(p.variants || []).map(v => v.color || v.name)
+          p.name, p.description, p.category,
+          ...(p.specs || []).map(s => s.key + ' ' + s.value),
+          ...(p.variants || []).map(v => v.name)
         ].join(' ').toLowerCase()
       };
-      
+
       productDB.push(mappedProduct);
     });
 
     // Log database stats
     const categories = {};
     productDB.forEach(p => { categories[p.category] = (categories[p.category] || 0) + 1; });
-    console.log(`✅ Loaded ${productDB.length} products from Firestore`);
+    console.log(`✅ Loaded ${productDB.length} products from JSON export`);
     console.log(`📊 Categories:`, JSON.stringify(categories));
-    
+
   } catch (err) {
-    console.error('❌ Failed to fetch products from Firestore:', err.message);
+    console.error('❌ Failed to load products from JSON:', err.message);
   }
 }
 
 // Initial load
 loadProducts();
-
-// Refresh products every 15 minutes to keep them up to date
-setInterval(loadProducts, 15 * 60 * 1000);
 
 // ─────────────────────────────────────────────
 // PRODUCT SEARCH ENGINE
@@ -290,7 +282,7 @@ function formatProductsForContext(products) {
 // ─────────────────────────────────────────────
 // SYSTEM PROMPT
 // ─────────────────────────────────────────────
-const SYSTEM_PROMPT = `You are the official AI Assistant for **Prime Elite Store** — a Premium Electronics & Luxury Lifestyle Store.
+const SYSTEM_PROMPT = `You are the official AI Assistant for **Prime Elite Store** — Premium Watches & Smart Devices.
 
 STORE INFORMATION:
 - Website: https://primeelitestore02.netlify.app
@@ -298,13 +290,13 @@ STORE INFORMATION:
 - Email: prime.elitestore02@gmail.com
 - Instagram: https://www.instagram.com/prime_elite_store/ (@prime_elite_store)
 - WhatsApp: https://wa.me/916263629683
-- Categories: Luxury Watches, Smart Watches, Earbuds, Ear Pods, Headphones, Audio Devices, Electronic Gadgets
+- Product Categories: Watches, Smartwatches, EarPods, Headphones, Smart Devices
 
 STORE POLICIES:
-- 50% advance payment required for order confirmation
-- Remaining amount payable before dispatch / on delivery
-- Worldwide delivery available
-- Orders manually reviewed and approved by admin team
+- All India delivery available
+- 50% advance payment is required for order dispatch
+- Remaining 50% is paid upon door-step delivery
+- Orders are manually reviewed and approved by admin team
 - Confirmation email sent when order is dispatched
 
 YOUR PERSONALITY:
@@ -325,9 +317,11 @@ When showing products, you MUST format EACH product EXACTLY like this:
 
 - ALWAYS include the image using markdown: ![Product Image](url)
 - ALWAYS include the product link
-- EXTREMELY CRITICAL: NEVER INVENT OR HALLUCINATE PRODUCTS, PRICES, LINKS, OR IMAGES.
-- IF A PRODUCT IS NOT PROVIDED IN THE [SYSTEM DATABASE LOOKUP RESULTS], YOU DO NOT SELL IT. You must politely say it is not available in the store.
-- ONLY use data provided in the product context
+- EXTREMELY CRITICAL: NEVER INVENT OR HALLUCINATE PRODUCTS, PRICES, LINKS, IMAGES, OR CATEGORIES.
+- You can ONLY recommend products that are explicitly provided in the [SYSTEM DATABASE LOOKUP RESULTS].
+- IF a product is NOT provided in the database results, YOU DO NOT SELL IT. Politely say it is not currently available in the store.
+- ONLY use data provided in the product context. Do NOT make up product names, prices, or URLs.
+
 RECOMMENDATION RULES:
 - When recommending, explain WHY you recommend each product
 - Consider budget, use case, and preferences
@@ -344,11 +338,12 @@ SECURITY:
 
 NO HALLUCINATION & REFUSALS (CRITICAL — READ CAREFULLY):
 - When product data is provided in the conversation, those products EXIST in our database. You MUST present them.
-- NEVER say "I couldn't find" or "no products available" or "not in our database" when product data has been provided to you.
+- NEVER say "I couldn't find" or "no products available" when product data HAS been provided to you.
 - You MUST base your recommendations ONLY on the product data provided.
-- Only if NO product data is provided at all in the conversation, say: "I couldn't find that in our current product database. Would you like me to help with something else?"
+- Only if NO product data is provided at all, say: "I couldn't find that in our current catalogue. Would you like me to help with something else?"
 - For general knowledge: answer from your training data normally
-- When in doubt, ALWAYS show the products that were provided to you.`;
+- When in doubt, ALWAYS show the products that were provided to you.
+- NEVER invent a product that was not in the database lookup results.`;
 
 // ─────────────────────────────────────────────
 // CONVERSATION MEMORY
